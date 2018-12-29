@@ -213,7 +213,6 @@ namespace PropertyTools.Wpf
             typeof(DataGrid),
             new UIPropertyMetadata(new CellDefinitionFactory()));
 
-
         /// <summary>
         /// Identifies the <see cref="CurrentCell"/> dependency property.
         /// </summary>
@@ -255,10 +254,19 @@ namespace PropertyTools.Wpf
                 new UIPropertyMetadata(new GridLength(20)));
 
         /// <summary>
-        /// Identifies the <see cref="EasyInsert"/> dependency property.
+        /// Identifies the <see cref="IsEasyInsertByKeyboardEnabled"/> dependency property.
         /// </summary>
-        public static readonly DependencyProperty EasyInsertProperty = DependencyProperty.Register(
-            nameof(EasyInsert),
+        public static readonly DependencyProperty IsEasyInsertByKeyboardEnabledProperty = DependencyProperty.Register(
+            nameof(IsEasyInsertByKeyboardEnabled),
+            typeof(bool),
+            typeof(DataGrid),
+            new UIPropertyMetadata(true));
+
+        /// <summary>
+        /// Identifies the <see cref="IsEasyInsertByMouseEnabled"/> dependency property.
+        /// </summary>
+        public static readonly DependencyProperty IsEasyInsertByMouseEnabledProperty = DependencyProperty.Register(
+            nameof(IsEasyInsertByMouseEnabled),
             typeof(bool),
             typeof(DataGrid),
             new UIPropertyMetadata(true));
@@ -408,11 +416,6 @@ namespace PropertyTools.Wpf
             new UIPropertyMetadata(false));
 
         /// <summary>
-        /// The horizontal scroll bar visibility to height converter
-        /// </summary>
-        private static readonly VisibilityConverter HorizontalScrollBarVisibilityConverter = new VisibilityConverter { CollapsedValue = 0d, HiddenValue = 0d, VisibleValue = SystemParameters.HorizontalScrollBarHeight };
-
-        /// <summary>
         /// The auto fill box.
         /// </summary>
         private const string PartAutoFillBox = "PART_AutoFillBox";
@@ -488,6 +491,11 @@ namespace PropertyTools.Wpf
         private const string PartTopLeft = "PART_TopLeft";
 
         /// <summary>
+        /// The horizontal scroll bar visibility to height converter
+        /// </summary>
+        private static readonly VisibilityConverter HorizontalScrollBarVisibilityConverter = new VisibilityConverter { CollapsedValue = 0d, HiddenValue = 0d, VisibleValue = SystemParameters.HorizontalScrollBarHeight };
+
+        /// <summary>
         /// The cell map.
         /// </summary>
         private readonly Dictionary<int, FrameworkElement> cellMap = new Dictionary<int, FrameworkElement>();
@@ -506,6 +514,11 @@ namespace PropertyTools.Wpf
         /// The sort descriptors
         /// </summary>
         private readonly SortDescriptionCollection sortDescriptions = new SortDescriptionCollection();
+
+        /// <summary>
+        /// The sort description markers
+        /// </summary>
+        private readonly List<FrameworkElement> sortDescriptionMarkers = new List<FrameworkElement>();
 
         /// <summary>
         /// The auto fill box.
@@ -574,11 +587,6 @@ namespace PropertyTools.Wpf
         private IList<CellRef> editingCells;
 
         /// <summary>
-        /// The sort description markers
-        /// </summary>
-        private readonly List<FrameworkElement> sortDescriptionMarkers = new List<FrameworkElement>();
-
-        /// <summary>
         /// The end pressed.
         /// </summary>
         private bool endPressed;
@@ -641,6 +649,9 @@ namespace PropertyTools.Wpf
             DefaultStyleKeyProperty.OverrideMetadata(
                 typeof(DataGrid),
                 new FrameworkPropertyMetadata(typeof(DataGrid)));
+            IsEnabledProperty.OverrideMetadata(
+                typeof(DataGrid),
+                new FrameworkPropertyMetadata((s, e) => ((DataGrid)s).HandleIsEnabledChanged(e)));
         }
 
         /// <summary>
@@ -921,13 +932,23 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Gets or sets a value indicating whether easy insert (press enter/down/right to add new rows/columns) is enabled.
+        /// Gets or sets a value indicating whether easy insert by keyboard (press enter/down/right to add new rows/columns) is enabled.
         /// </summary>
         /// <value><c>true</c> if easy insert is enabled; otherwise, <c>false</c>.</value>
-        public bool EasyInsert
+        public bool IsEasyInsertByKeyboardEnabled
         {
-            get => (bool)this.GetValue(EasyInsertProperty);
-            set => this.SetValue(EasyInsertProperty, value);
+            get => (bool)this.GetValue(IsEasyInsertByKeyboardEnabledProperty);
+            set => this.SetValue(IsEasyInsertByKeyboardEnabledProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether easy insert by mouse (mouse down outside existing rows/columns) is enabled.
+        /// </summary>
+        /// <value><c>true</c> if easy insert is enabled; otherwise, <c>false</c>.</value>
+        public bool IsEasyInsertByMouseEnabled
+        {
+            get => (bool)this.GetValue(IsEasyInsertByMouseEnabledProperty);
+            set => this.SetValue(IsEasyInsertByMouseEnabledProperty, value);
         }
 
         /// <summary>
@@ -1073,14 +1094,14 @@ namespace PropertyTools.Wpf
         {
             get
             {
-                int rowMin = Math.Min(this.CurrentCell.Row, this.SelectionCell.Row);
-                int columnMin = Math.Min(this.CurrentCell.Column, this.SelectionCell.Column);
-                int rowMax = Math.Max(this.CurrentCell.Row, this.SelectionCell.Row);
-                int columnMax = Math.Max(this.CurrentCell.Column, this.SelectionCell.Column);
+                var rowMin = Math.Min(this.CurrentCell.Row, this.SelectionCell.Row);
+                var columnMin = Math.Min(this.CurrentCell.Column, this.SelectionCell.Column);
+                var rowMax = Math.Max(this.CurrentCell.Row, this.SelectionCell.Row);
+                var columnMax = Math.Max(this.CurrentCell.Column, this.SelectionCell.Column);
 
-                for (int i = rowMin; i <= rowMax; i++)
+                for (var i = rowMin; i <= rowMax; i++)
                 {
-                    for (int j = columnMin; j <= columnMax; j++)
+                    for (var j = columnMin; j <= columnMax; j++)
                     {
                         yield return new CellRef(i, j);
                     }
@@ -1135,36 +1156,12 @@ namespace PropertyTools.Wpf
         /// Gets the number of columns.
         /// </summary>
         /// <value>The number of columns.</value>
-        public int Columns => this.sheetGrid.ColumnDefinitions.Count;
+        public int Columns => this.sheetGrid != null ? this.sheetGrid.ColumnDefinitions.Count : 0;
 
         /// <summary>
         /// Gets the number of rows.</summary>
         /// <value>The number of rows.</value>
-        public int Rows => this.sheetGrid.RowDefinitions.Count - 1;
-
-        /// <summary>
-        /// Gets a value indicating whether this instance can delete columns.
-        /// </summary>
-        /// <value><c>true</c> if this instance can delete columns; otherwise, <c>false</c> .</value>
-        protected virtual bool CanDeleteColumns => this.Operator?.CanDeleteColumns(this) ?? false;
-
-        /// <summary>
-        /// Gets a value indicating whether this instance can delete rows.
-        /// </summary>
-        /// <value><c>true</c> if this instance can delete rows; otherwise, <c>false</c> .</value>
-        protected virtual bool CanDeleteRows => this.Operator?.CanDeleteRows(this) ?? false;
-
-        /// <summary>
-        /// Gets a value indicating whether this instance can insert columns.
-        /// </summary>
-        /// <value><c>true</c> if this instance can insert columns; otherwise, <c>false</c> .</value>
-        protected virtual bool CanInsertColumns => this.Operator?.CanInsertColumns(this) ?? false;
-
-        /// <summary>
-        /// Gets a value indicating whether this instance can insert rows.
-        /// </summary>
-        /// <value><c>true</c> if this instance can insert rows; otherwise, <c>false</c> .</value>
-        protected virtual bool CanInsertRows => this.Operator?.CanInsertRows(this) ?? false;
+        public int Rows => this.sheetGrid != null ? this.sheetGrid.RowDefinitions.Count - 1 : 0;
 
         /// <summary>
         /// Gets a value indicating whether to use columns for the items.
@@ -1183,428 +1180,28 @@ namespace PropertyTools.Wpf
         public Collection<PropertyDefinition> PropertyDefinitions { get; } = new Collection<PropertyDefinition>();
 
         /// <summary>
-        /// Autosizes all columns.
+        /// Gets a value indicating whether this instance can delete columns.
         /// </summary>
-        private void AutoSizeAllColumns()
-        {
-            this.sheetGrid.UpdateLayout();
-            this.columnGrid.UpdateLayout();
-            for (int i = 0; i < this.Columns; i++)
-            {
-                this.AutoSizeColumn(i);
-            }
-        }
+        /// <value><c>true</c> if this instance can delete columns; otherwise, <c>false</c> .</value>
+        protected virtual bool CanDeleteColumns => this.Operator?.CanDeleteColumns() ?? false;
 
         /// <summary>
-        /// Autosizes all rows.
+        /// Gets a value indicating whether this instance can delete rows.
         /// </summary>
-        private void AutoSizeAllRows()
-        {
-            this.sheetGrid.UpdateLayout();
-            this.rowGrid.UpdateLayout();
-            for (int i = 0; i < this.Rows; i++)
-            {
-                this.AutoSizeRow(i);
-            }
-        }
+        /// <value><c>true</c> if this instance can delete rows; otherwise, <c>false</c> .</value>
+        protected virtual bool CanDeleteRows => this.Operator?.CanDeleteRows() ?? false;
 
         /// <summary>
-        /// Auto-sizes the specified column.
+        /// Gets a value indicating whether this instance can insert columns.
         /// </summary>
-        /// <param name="column">The column.</param>
-        /// <returns>The calculated width of the column.</returns>
-        private double AutoSizeColumn(int column)
-        {
-            if (column < 0 || column >= this.Columns)
-            {
-                throw new ArgumentException("Invalid column");
-            }
-
-            // Initialize with the width of the header element
-            var headerElement = this.GetColumnElement(column);
-            var maximumWidth = headerElement.ActualWidth + headerElement.Margin.Left + headerElement.Margin.Right;
-
-            // Compare with the widths of the cell elements
-            for (var i = 0; i < this.sheetGrid.RowDefinitions.Count; i++)
-            {
-                var c = this.GetCellElement(new CellRef(i, column));
-
-                if (c != null)
-                {
-                    maximumWidth = Math.Max(maximumWidth, c.ActualWidth + c.Margin.Left + c.Margin.Right);
-                }
-            }
-
-            var newWidth = (int)maximumWidth + 2;
-            this.SetColumnWidth(column, new GridLength(newWidth));
-            return newWidth;
-        }
+        /// <value><c>true</c> if this instance can insert columns; otherwise, <c>false</c> .</value>
+        protected virtual bool CanInsertColumns => this.Operator?.CanInsertColumns() ?? false;
 
         /// <summary>
-        /// Auto-sizes the specified row.
+        /// Gets a value indicating whether this instance can insert rows.
         /// </summary>
-        /// <param name="row">The row.</param>
-        private void AutoSizeRow(int row)
-        {
-            // Initialize with the height of the header element
-            var headerElement = this.GetRowElement(row);
-            var maximumHeight = headerElement.ActualHeight + headerElement.Margin.Top + headerElement.Margin.Bottom;
-
-            // Compare with the heights of the cell elements
-            for (var i = 0; i < this.sheetGrid.ColumnDefinitions.Count; i++)
-            {
-                var c = this.GetCellElement(new CellRef(row, i));
-                if (c != null)
-                {
-                    maximumHeight = Math.Max(maximumHeight, c.ActualHeight + c.Margin.Top + c.Margin.Bottom);
-                }
-            }
-
-            this.sheetGrid.RowDefinitions[row].Height = new GridLength((int)maximumHeight + 2);
-        }
-
-        /// <summary>
-        /// Copies the selected cells to the clipboard, tab-separated.
-        /// </summary>
-        private void Copy()
-        {
-            this.CopyOverride();
-        }
-
-        /// <summary>
-        /// Implements the copy operation.
-        /// </summary>
-        protected virtual void CopyOverride()
-        {
-            this.Copy("\t");
-        }
-
-        /// <summary>
-        /// Cuts the selected items.
-        /// </summary>
-        private void Cut()
-        {
-            this.CutOverride();
-        }
-
-        /// <summary>
-        /// Implements the cut operation.
-        /// </summary>
-        protected virtual void CutOverride()
-        {
-            this.Copy();
-            this.Clear();
-        }
-
-        /// <summary>
-        /// Gets the selection cell range.
-        /// </summary>
-        /// <returns>The cell range.</returns>
-        protected CellRange GetSelectionRange()
-        {
-            return new CellRange(this.CurrentCell, this.SelectionCell);
-        }
-
-        /// <summary>
-        /// Copies the selected cells to the clipboard.
-        /// </summary>
-        /// <param name="separator">The separator.</param>
-        protected void Copy(string separator)
-        {
-            var range = this.GetSelectionRange();
-            var valueArray = this.GetCellValues(range);
-            var stringArray = this.GetCellStrings(range, valueArray);
-            var text = this.ConvertToCsv(stringArray, separator, true);
-
-            var dataObject = new DataObject();
-            dataObject.SetText(text);
-
-            if (AreAllElementsSerializable(valueArray))
-            {
-                try
-                {
-                    dataObject.SetData(typeof(DataGrid), valueArray);
-                }
-                catch (Exception e)
-                {
-                    // nonserializable values?
-                    Debug.WriteLine(e);
-                }
-            }
-
-            Clipboard.SetDataObject(dataObject);
-        }
-
-        /// <summary>
-        /// Gets the cell reference for the specified position.
-        /// </summary>
-        /// <param name="position">The position.</param>
-        /// <param name="isInAutoFillMode">if set to <c>true</c> [is in auto fill mode].</param>
-        /// <param name="relativeTo">The relative to.</param>
-        /// <returns>
-        /// The cell reference.
-        /// </returns>
-        private CellRef GetCell(Point position, bool isInAutoFillMode = false, CellRef relativeTo = default(CellRef))
-        {
-            var w = 0d;
-            var column = -1;
-            var row = -1;
-            for (var j = 0; j < this.sheetGrid.ColumnDefinitions.Count; j++)
-            {
-                var aw0 = j - 1 >= 0 ? this.sheetGrid.ColumnDefinitions[j - 1].ActualWidth : 0;
-                var aw1 = this.sheetGrid.ColumnDefinitions[j].ActualWidth;
-                var aw2 = j + 1 < this.sheetGrid.ColumnDefinitions.Count
-                                 ? this.sheetGrid.ColumnDefinitions[j + 1].ActualWidth
-                                 : 0;
-                if (isInAutoFillMode)
-                {
-                    if (relativeTo.Column <= j)
-                    {
-                        aw0 = 0;
-                        aw2 *= 0.5;
-                    }
-                    else
-                    {
-                        aw0 *= 0.5;
-                        aw2 = 0;
-                    }
-                }
-                else
-                {
-                    aw0 = 0;
-                    aw2 = 0;
-                }
-
-                if (position.X > w - aw0 && position.X < w + aw1 + aw2)
-                {
-                    column = j;
-                    break;
-                }
-
-                w += aw1;
-            }
-
-            if (w > 0 && column == -1)
-            {
-                column = this.sheetGrid.ColumnDefinitions.Count - 1;
-            }
-
-            var h = 0d;
-            for (int i = 0; i < this.sheetGrid.RowDefinitions.Count; i++)
-            {
-                var ah = this.sheetGrid.RowDefinitions[i].ActualHeight;
-                if (position.Y < h + ah)
-                {
-                    row = i;
-                    break;
-                }
-
-                h += ah;
-            }
-
-            if (h > 0 && row == -1)
-            {
-                row = this.sheetGrid.RowDefinitions.Count - 1;
-            }
-
-            if (column == -1 || row == -1)
-            {
-                return new CellRef(-1, -1);
-            }
-
-            return new CellRef(row, column);
-        }
-
-        /// <summary>
-        /// Gets the element at the specified cell.
-        /// </summary>
-        /// <param name="cellRef">The cell reference.</param>
-        /// <returns>
-        /// The element, or <c>null</c> if the cell was not found.
-        /// </returns>
-        private FrameworkElement GetCellElement(CellRef cellRef)
-        {
-            if (this.cellMap.TryGetValue(cellRef.GetHashCode(), out var e))
-            {
-                // check if the element is wrapped in a border container
-                var border = e as Border;
-                if (border != null)
-                {
-                    return (FrameworkElement)border.Child;
-                }
-
-                return e;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Gets the formatted string value for the specified cell.
-        /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <param name="value">The value.</param>
-        /// <returns>
-        /// The cell string.
-        /// </returns>
-        protected virtual string FormatCellString(CellRef cell, object value)
-        {
-            var formatString = this.GetFormatString(cell);
-            return FormatValue(value, formatString);
-        }
-
-        /// <summary>
-        /// Gets the cell value from the Content property for the specified cell.
-        /// </summary>
-        /// <param name="cell">The cell reference.</param>
-        /// <returns>
-        /// The cell value.
-        /// </returns>
-        private object GetCellValue(CellRef cell)
-        {
-            return this.Operator.GetCellValue(this, cell);
-        }
-
-        /// <summary>
-        /// Gets the position of the specified cell.
-        /// </summary>
-        /// <param name="cellRef">The cell reference.</param>
-        /// <returns>
-        /// The upper-left position of the cell.
-        /// </returns>
-        private Point GetPosition(CellRef cellRef)
-        {
-            var x = 0d;
-            var y = 0d;
-            for (var j = 0; j < cellRef.Column && j < this.sheetGrid.ColumnDefinitions.Count; j++)
-            {
-                x += this.sheetGrid.ColumnDefinitions[j].ActualWidth;
-            }
-
-            for (var i = 0; i < cellRef.Row && i < this.sheetGrid.RowDefinitions.Count; i++)
-            {
-                y += this.sheetGrid.RowDefinitions[i].ActualHeight;
-            }
-
-            return new Point(x, y);
-        }
-
-#if FEATURE_VIRTUALIZATION
-        /// <summary>
-        /// Gets the visible cells.
-        /// </summary>
-        /// <param name="topLeftCell">The top left cell.</param>
-        /// <param name="bottomRightCell">The bottom right cell.</param>
-        private void GetVisibleCells(out CellRef topLeftCell, out CellRef bottomRightCell)
-        {
-            var left = this.sheetScrollViewer.HorizontalOffset;
-            var right = left + this.sheetScrollViewer.ActualWidth;
-            var top = this.sheetScrollViewer.VerticalOffset;
-            var bottom = top + this.sheetScrollViewer.ActualHeight;
-
-            topLeftCell = this.GetCell(new Point(left, top));
-            bottomRightCell = this.GetCell(new Point(right, bottom));
-        }
-#endif
-
-        /// <summary>
-        /// Removes the current editor control.
-        /// </summary>
-        private void RemoveEditControl()
-        {
-            if (this.currentEditControl != null/* && this.currentEditControl.Visibility == Visibility.Visible*/)
-            {
-                var textEditor = this.currentEditControl as TextBox;
-                if (textEditor != null)
-                {
-                    textEditor.PreviewKeyDown -= this.TextEditorPreviewKeyDown;
-                }
-
-                this.sheetGrid.Children.Remove(this.currentEditControl);
-                this.currentEditControl = null;
-                this.Focus();
-            }
-        }
-
-        /// <summary>
-        /// Inserts an item.
-        /// </summary>
-        /// <param name="index">The index.</param>
-        /// <param name="updateGrid">Determines whether the grid should be updated.</param>
-        /// <returns>
-        /// The actual index of the inserted item, <c>-1</c> if no item was inserted.
-        /// </returns>
-        private int InsertItem(int index, bool updateGrid = true)
-        {
-            var actualIndex = this.Operator.InsertItem(this, index);
-            if (actualIndex != -1)
-            {
-                if (updateGrid)
-                {
-                    this.UpdateGridContent();
-                }
-            }
-
-            this.RefreshIfRequired();
-
-            return actualIndex;
-        }
-
-        /// <summary>
-        /// Changes the current cell with the specified delta.
-        /// </summary>
-        /// <param name="deltaRows">The change in rows.</param>
-        /// <param name="deltaColumns">The change in columns.</param>
-        private void ChangeCurrentCell(int deltaRows, int deltaColumns)
-        {
-            var row = this.CurrentCell.Row;
-            var column = this.CurrentCell.Column;
-            row += deltaRows;
-            column += deltaColumns;
-            if (row < 0)
-            {
-                row = this.Rows - 1;
-                column--;
-            }
-
-            if (row >= this.Rows && (!this.CanInsertRows || !this.EasyInsert))
-            {
-                column++;
-                row = 0;
-                if (column >= this.Columns)
-                {
-                    column = 0;
-                }
-            }
-
-            if (column < 0)
-            {
-                column = 0;
-                row--;
-                if (row < 0)
-                {
-                    row = this.Rows - 1;
-                }
-            }
-
-            if (column >= this.Columns && (!this.CanInsertColumns || !this.EasyInsert))
-            {
-                column = 0;
-                row++;
-                if (row >= this.Rows && (!this.CanInsertRows || !this.EasyInsert))
-                {
-                    row = 0;
-                }
-            }
-
-            var cell = new CellRef(row, column);
-            if (!this.HandleAutoInsert(cell))
-            {
-                this.SelectionCell = cell;
-                this.CurrentCell = cell;
-                this.ScrollIntoView(cell);
-            }
-        }
+        /// <value><c>true</c> if this instance can insert rows; otherwise, <c>false</c> .</value>
+        protected virtual bool CanInsertRows => this.Operator?.CanInsertRows() ?? false;
 
         /// <summary>
         /// When overridden in a derived class, is invoked whenever application code or internal processes call <see
@@ -1702,11 +1299,51 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
+        /// Receives events from the centralized event manager.
+        /// </summary>
+        /// <param name="managerType">The type of the <see cref="T:System.Windows.WeakEventManager" /> calling this method.</param>
+        /// <param name="sender">Object that originated the event.</param>
+        /// <param name="e">Event data.</param>
+        /// <returns>
+        /// true if the listener handled the event. It is considered an error by the <see cref="T:System.Windows.WeakEventManager" /> handling in WPF to register a listener for an event that the listener does not handle. Regardless, the method should return false if it receives an event that it does not recognize or handle.
+        /// </returns>
+        public bool ReceiveWeakEvent(Type managerType, object sender, EventArgs e)
+        {
+            if (managerType == typeof(CollectionChangedEventManager) && sender == this.subscribedCollection)
+            {
+                this.OnItemsCollectionChanged(e as NotifyCollectionChangedEventArgs);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Pastes the content from the clipboard to the selected cells.
         /// </summary>
         public void Paste()
         {
             this.PasteOverride();
+        }
+
+        /// <summary>
+        /// Gets the column/row definition for the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell reference.</param>
+        /// <returns>
+        /// The column/row definition.
+        /// </returns>
+        internal PropertyDefinition GetPropertyDefinition(CellRef cell)
+        {
+            var index = this.ItemsInRows ? cell.Column : cell.Row;
+
+            if (index < this.PropertyDefinitions.Count)
+            {
+                return this.PropertyDefinitions[index];
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -1753,7 +1390,7 @@ namespace PropertyTools.Wpf
                         break;
                     }
 
-                    this.Operator.InsertRows(this, i, 1);
+                    this.Operator.InsertRows(i, 1);
                 }
 
                 for (var j = range.LeftColumn; j <= outputRange.RightColumn; j++)
@@ -1765,7 +1402,7 @@ namespace PropertyTools.Wpf
                             break;
                         }
 
-                        this.Operator.InsertColumns(this, i, 1);
+                        this.Operator.InsertColumns(i, 1);
                     }
 
                     var value = values[(i - outputRange.TopRow) % rows, (j - outputRange.LeftColumn) % columns];
@@ -1804,27 +1441,6 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Receives events from the centralized event manager.
-        /// </summary>
-        /// <param name="managerType">The type of the <see cref="T:System.Windows.WeakEventManager" /> calling this method.</param>
-        /// <param name="sender">Object that originated the event.</param>
-        /// <param name="e">Event data.</param>
-        /// <returns>
-        /// true if the listener handled the event. It is considered an error by the <see cref="T:System.Windows.WeakEventManager" /> handling in WPF to register a listener for an event that the listener does not handle. Regardless, the method should return false if it receives an event that it does not recognize or handle.
-        /// </returns>
-        public bool ReceiveWeakEvent(Type managerType, object sender, EventArgs e)
-        {
-            if (managerType == typeof(CollectionChangedEventManager) && sender == this.subscribedCollection)
-            {
-                this.OnItemsCollectionChanged(e as NotifyCollectionChangedEventArgs);
-
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
         /// Scroll the specified cell into view.
         /// </summary>
         /// <param name="cellRef">The cell reference.</param>
@@ -1859,48 +1475,73 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Shows the text box editor.
+        /// Implements the copy operation.
         /// </summary>
-        /// <returns>
-        /// <c>true</c> if the text editor was shown, <c>false</c> otherwise.
-        /// </returns>
-        private bool ShowTextBoxEditControl()
+        protected virtual void CopyOverride()
         {
-            if (this.currentEditControl == null)
-            {
-                this.ShowEditControl();
-            }
-
-            var textEditor = this.currentEditControl as TextBox;
-            if (textEditor != null)
-            {
-                textEditor.Visibility = Visibility.Visible;
-                textEditor.Focus();
-                textEditor.CaretIndex = textEditor.Text.Length;
-                textEditor.SelectAll();
-                return true;
-            }
-
-            return false;
+            this.Copy("\t");
         }
 
         /// <summary>
-        /// Opens the combo box control.
+        /// Implements the cut operation.
         /// </summary>
-        /// <returns>
-        /// <c>true</c> if the combo box was shown, <c>false</c> otherwise.
-        /// </returns>
-        private bool OpenComboBoxControl()
+        protected virtual void CutOverride()
         {
-            var comboBox = this.currentEditControl as ComboBox;
-            if (comboBox != null)
+            this.Copy();
+            this.Clear();
+        }
+
+        /// <summary>
+        /// Gets the selection cell range.
+        /// </summary>
+        /// <returns>The cell range.</returns>
+        protected CellRange GetSelectionRange()
+        {
+            return new CellRange(this.CurrentCell, this.SelectionCell);
+        }
+
+        /// <summary>
+        /// Copies the selected cells to the clipboard.
+        /// </summary>
+        /// <param name="separator">The separator.</param>
+        protected void Copy(string separator)
+        {
+            var range = this.GetSelectionRange();
+            var valueArray = this.GetCellValues(range);
+            var stringArray = this.GetCellStrings(range, valueArray);
+            var text = this.ConvertToCsv(stringArray, separator, true);
+
+            var dataObject = new DataObject();
+            dataObject.SetText(text);
+
+            if (AreAllElementsSerializable(valueArray))
             {
-                comboBox.IsDropDownOpen = true;
-                comboBox.Focus();
-                return true;
+                try
+                {
+                    dataObject.SetData(typeof(DataGrid), valueArray);
+                }
+                catch (Exception e)
+                {
+                    // nonserializable values?
+                    Debug.WriteLine(e);
+                }
             }
 
-            return false;
+            Clipboard.SetDataObject(dataObject);
+        }
+
+        /// <summary>
+        /// Gets the formatted string value for the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <param name="value">The value.</param>
+        /// <returns>
+        /// The cell string.
+        /// </returns>
+        protected virtual string FormatCellString(CellRef cell, object value)
+        {
+            var formatString = this.GetFormatString(cell);
+            return FormatValue(value, formatString);
         }
 
         /// <summary>
@@ -1941,120 +1582,214 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Tries to set the value in the specified cell.
+        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Keyboard.PreviewKeyDown" /> attached event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
         /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <param name="value">The value.</param>
-        /// <returns>
-        /// True if the value was set.
-        /// </returns>
-        private bool TrySetCellValue(CellRef cell, object value)
+        /// <param name="e">The <see cref="T:System.Windows.Input.KeyEventArgs" /> that contains the event data.</param>
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
         {
-            var cellWasSet = this.Operator.TrySetCellValue(this, cell, value);
-            if (cellWasSet && !(this.ItemsSource is INotifyCollectionChanged))
+            base.OnPreviewKeyDown(e);
+            if (e.Key == Key.ImeProcessed)
             {
-                this.UpdateCellContent(cell);
+                if (this.currentEditControl is TextBox textEditor && !textEditor.IsFocused)
+                {
+                    this.ShowTextBoxEditControl();
+                }
             }
-
-            return cellWasSet;
         }
 
         /// <summary>
-        /// Creates the display control for the specified cell.
+        /// Handles mouse left button down events.
         /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <returns>
-        /// The display control.
-        /// </returns>
-        private FrameworkElement CreateDisplayControl(CellRef cell)
+        /// <param name="e">The event arguments.</param>
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
-            var d = this.CreateCellDescriptor(cell);
-            var cd = this.CellDefinitionFactory.CreateCellDefinition(d);
-            var element = this.ControlFactory.CreateDisplayControl(cd);
-            if (element == null)
-            {
-#if DEBUG
-                throw new InvalidOperationException("Display control not implemented for " + cd);
-#else
-                return null;
-#endif
-            }
+            this.Focus();
+            base.OnMouseLeftButtonDown(e);
 
-            element.DataContext = cd.BindingSource;
-            element.SourceUpdated += (s, e) => this.CurrentCellSourceUpdated(cell);
+            var pos = e.GetPosition(this.sheetGrid);
+            var cellRef = this.GetCell(pos);
 
-            return element;
-        }
-
-        /// <summary>
-        /// Creates the edit control for the specified cell.
-        /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <returns>
-        /// The edit control.
-        /// </returns>
-        private FrameworkElement CreateEditControl(CellRef cell)
-        {
-            var d = this.CreateCellDescriptor(cell);
-            var cd = this.CellDefinitionFactory.CreateCellDefinition(d);
-            var element = this.ControlFactory.CreateEditControl(cd);
-            if (element == null)
-            {
-                return null;
-            }
-
-            element.DataContext = cd.BindingSource;
-            element.SourceUpdated += (s, e) => this.CurrentCellSourceUpdated(cell);
-
-            return element;
-        }
-
-        /// <summary>
-        /// Shows the edit control for the current cell.
-        /// </summary>
-        /// <returns>
-        /// True if an edit control is shown.
-        /// </returns>
-        private void ShowEditControl()
-        {
-            this.RemoveEditControl();
-            var cell = this.CurrentCell;
-
-            if (cell.Row >= this.Rows || cell.Column >= this.Columns)
+            if (cellRef.Column == -1 || cellRef.Row == -1)
             {
                 return;
             }
 
-            if (this.currentEditControl != null)
+            if (cellRef.Row >= this.Rows && (!this.CanInsertRows || !this.IsEasyInsertByMouseEnabled))
             {
-                throw new InvalidOperationException();
+                return;
             }
 
-            this.editingCells = this.SelectedCells.ToList();
+            if (cellRef.Column > this.Columns && (!this.CanInsertColumns || !this.IsEasyInsertByMouseEnabled))
+            {
+                return;
+            }
 
-            this.currentEditControl = this.CreateEditControl(cell);
+            if (this.autoFillSelection.Visibility == Visibility.Visible)
+            {
+                this.AutoFillCell = cellRef;
+                Mouse.OverrideCursor = this.autoFillBox.Cursor;
+                this.autoFillToolTip.IsOpen = true;
+            }
+            else
+            {
+                if (!this.HandleAutoInsert(cellRef))
+                {
+                    var shift = (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.None;
+                    if (!shift)
+                    {
+                        this.CurrentCell = cellRef;
+                    }
+
+                    this.SelectionCell = cellRef;
+                    this.ScrollIntoView(cellRef);
+                }
+
+                Mouse.OverrideCursor = this.sheetGrid.Cursor;
+            }
+
+            this.CaptureMouse();
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// Handles mouse left button up events.
+        /// </summary>
+        /// <param name="e">The event arguments.</param>
+        protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+        {
+            this.OnMouseUp(e);
+
+            this.ReleaseMouseCapture();
+            Mouse.OverrideCursor = null;
+
+            if (this.autoFillSelection.Visibility == Visibility.Visible)
+            {
+                this.autoFiller.AutoFill(this.CurrentCell, this.SelectionCell, this.AutoFillCell);
+
+                this.autoFillSelection.Visibility = Visibility.Hidden;
+                this.autoFillToolTip.IsOpen = false;
+            }
+        }
+
+        /// <summary>
+        /// Handles mouse move events.
+        /// </summary>
+        /// <param name="e">The event arguments.</param>
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+
+            if (!this.IsMouseCaptured)
+            {
+                return;
+            }
+
+            var isInAutoFillMode = this.autoFillSelection.Visibility == Visibility.Visible;
+
+            var pos = e.GetPosition(this.sheetGrid);
+            var cellRef = this.GetCell(pos, isInAutoFillMode, this.CurrentCell);
+
+            if (cellRef.Column == -1 || cellRef.Row == -1)
+            {
+                return;
+            }
+
+            if (cellRef.Row >= this.Rows && (!this.CanInsertRows || !this.IsEasyInsertByMouseEnabled))
+            {
+                return;
+            }
+
+            if (cellRef.Column > this.Columns && (!this.CanInsertColumns || !this.IsEasyInsertByMouseEnabled))
+            {
+                return;
+            }
+
+            if (isInAutoFillMode)
+            {
+                this.AutoFillCell = cellRef;
+                if (this.autoFiller.TryExtrapolate(
+                    cellRef,
+                    this.CurrentCell,
+                    this.SelectionCell,
+                    this.AutoFillCell,
+                    out var result))
+                {
+                    var formatString = this.GetFormatString(cellRef);
+                    this.autoFillToolTip.Content = FormatValue(result, formatString);
+                }
+
+                this.autoFillToolTip.Placement = PlacementMode.Relative;
+                var p = e.GetPosition(this.autoFillSelection);
+                this.autoFillToolTip.HorizontalOffset = p.X + 8;
+                this.autoFillToolTip.VerticalOffset = p.Y + 8;
+            }
+            else
+            {
+                this.SelectionCell = cellRef;
+            }
+
+            this.ScrollIntoView(cellRef);
+        }
+
+        /// <summary>
+        /// Handles mouse wheel preview events.
+        /// </summary>
+        /// <param name="e">The event arguments.</param>
+        protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
+        {
+            base.OnPreviewMouseWheel(e);
+
+            var control = Keyboard.IsKeyDown(Key.LeftCtrl);
+            if (control)
+            {
+                var s = 1 + (e.Delta * 0.0004);
+                var tg = new TransformGroup();
+                if (this.LayoutTransform != null)
+                {
+                    tg.Children.Add(this.LayoutTransform);
+                }
+
+                tg.Children.Add(new ScaleTransform(s, s));
+                this.LayoutTransform = tg;
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Handles text input events.
+        /// </summary>
+        /// <param name="e">The event arguments.</param>
+        protected override void OnTextInput(TextCompositionEventArgs e)
+        {
+            base.OnTextInput(e);
+
+            // do not allow special characters (including backspace, tab, enter)
+            // it is particularly bad to add backspace characters to the cell, since this may not be XML serialized...
+            if (e.Text.Length == 0 || e.Text[0] < 32)
+            {
+                return;
+            }
+
             if (this.currentEditControl == null)
             {
-                return;
+                this.ShowEditControl();
             }
 
-            // TODO: refactor this special case
-            var textEditor = this.currentEditControl as TextBox;
-            if (textEditor != null)
+            if (this.currentEditControl is TextBox textEditor && textEditor.IsEnabled)
             {
-                this.currentEditControl.Visibility = Visibility.Hidden;
-                textEditor.PreviewKeyDown += this.TextEditorPreviewKeyDown;
+                this.ShowTextBoxEditControl();
+                this.Dispatcher.BeginInvoke(
+                    new Action(
+                    () =>
+                    {
+                        // make sure this code is executed after the textbox has been loaded (and bindings updated)
+                        textEditor.Text = e.Text;
+                        textEditor.CaretIndex = textEditor.Text.Length;
+                    }),
+                    DispatcherPriority.Loaded);
             }
 
-            Grid.SetColumn(this.currentEditControl, this.CurrentCell.Column);
-            Grid.SetRow(this.currentEditControl, this.CurrentCell.Row);
-
-            this.sheetGrid.Children.Add(this.currentEditControl);
-
-            if (this.currentEditControl.Visibility == Visibility.Visible)
-            {
-                this.currentEditControl.Focus();
-            }
+            e.Handled = true;
         }
 
         /// <summary>
@@ -2108,7 +1843,7 @@ namespace PropertyTools.Wpf
 
                     break;
                 case Key.Down:
-                    if (row < this.Rows - 1 || (this.CanInsertRows && this.EasyInsert))
+                    if (row < this.Rows - 1 || (this.CanInsertRows && this.IsEasyInsertByKeyboardEnabled))
                     {
                         row++;
                     }
@@ -2142,7 +1877,7 @@ namespace PropertyTools.Wpf
 
                     break;
                 case Key.Right:
-                    if (column < this.Columns - 1 || (this.CanInsertColumns && this.EasyInsert))
+                    if (column < this.Columns - 1 || (this.CanInsertColumns && this.IsEasyInsertByKeyboardEnabled))
                     {
                         column++;
                     }
@@ -2175,6 +1910,7 @@ namespace PropertyTools.Wpf
                         this.Clear();
                         e.Handled = true;
                     }
+
                     return;
                 case Key.F2:
                     if (this.ShowTextBoxEditControl())
@@ -2226,7 +1962,6 @@ namespace PropertyTools.Wpf
             var cell = new CellRef(row, column);
             if (!this.HandleAutoInsert(cell))
             {
-
                 this.SelectionCell = cell;
 
                 if (!shift)
@@ -2235,217 +1970,6 @@ namespace PropertyTools.Wpf
                 }
 
                 this.ScrollIntoView(cell);
-            }
-
-            e.Handled = true;
-        }
-
-        /// <summary>
-        /// Invoked when an unhandled <see cref="E:System.Windows.Input.Keyboard.PreviewKeyDown" /> attached event reaches an element in its route that is derived from this class. Implement this method to add class handling for this event.
-        /// </summary>
-        /// <param name="e">The <see cref="T:System.Windows.Input.KeyEventArgs" /> that contains the event data.</param>
-        protected override void OnPreviewKeyDown(KeyEventArgs e)
-        {
-            base.OnPreviewKeyDown(e);
-            if (e.Key == Key.ImeProcessed)
-            {
-                var textEditor = this.currentEditControl as TextBox;
-                if (textEditor != null && !textEditor.IsFocused)
-                {
-                    this.ShowTextBoxEditControl();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Handles mouse left button down events.
-        /// </summary>
-        /// <param name="e">The event arguments.</param>
-        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
-        {
-            this.Focus();
-            base.OnMouseLeftButtonDown(e);
-
-            var pos = e.GetPosition(this.sheetGrid);
-            var cellRef = this.GetCell(pos);
-
-            if (cellRef.Column == -1 || cellRef.Row == -1)
-            {
-                return;
-            }
-
-            if (cellRef.Row >= this.Rows && (!this.CanInsertRows || !this.EasyInsert))
-            {
-                return;
-            }
-
-            if (cellRef.Column > this.Columns && (!this.CanInsertColumns || !this.EasyInsert))
-            {
-                return;
-            }
-
-            if (this.autoFillSelection.Visibility == Visibility.Visible)
-            {
-                this.AutoFillCell = cellRef;
-                Mouse.OverrideCursor = this.autoFillBox.Cursor;
-                this.autoFillToolTip.IsOpen = true;
-            }
-            else
-            {
-                if (!this.HandleAutoInsert(cellRef))
-                {
-
-                    var shift = (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.None;
-                    if (!shift)
-                    {
-                        this.CurrentCell = cellRef;
-                    }
-
-                    this.SelectionCell = cellRef;
-                    this.ScrollIntoView(cellRef);
-                }
-                Mouse.OverrideCursor = this.sheetGrid.Cursor;
-            }
-
-            this.CaptureMouse();
-            e.Handled = true;
-        }
-
-        /// <summary>
-        /// Handles mouse left button up events.
-        /// </summary>
-        /// <param name="e">The event arguments.</param>
-        protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
-        {
-            this.OnMouseUp(e);
-
-            this.ReleaseMouseCapture();
-            Mouse.OverrideCursor = null;
-
-            if (this.autoFillSelection.Visibility == Visibility.Visible)
-            {
-                this.autoFiller.AutoFill(this.CurrentCell, this.SelectionCell, this.AutoFillCell);
-
-                this.autoFillSelection.Visibility = Visibility.Hidden;
-                this.autoFillToolTip.IsOpen = false;
-            }
-        }
-
-        /// <summary>
-        /// Handles mouse move events.
-        /// </summary>
-        /// <param name="e">The event arguments.</param>
-        protected override void OnMouseMove(MouseEventArgs e)
-        {
-            base.OnMouseMove(e);
-
-            if (!this.IsMouseCaptured)
-            {
-                return;
-            }
-
-            var isInAutoFillMode = this.autoFillSelection.Visibility == Visibility.Visible;
-
-            var pos = e.GetPosition(this.sheetGrid);
-            var cellRef = this.GetCell(pos, isInAutoFillMode, this.CurrentCell);
-
-            if (cellRef.Column == -1 || cellRef.Row == -1)
-            {
-                return;
-            }
-
-            if (cellRef.Row >= this.Rows && (!this.CanInsertRows || !this.EasyInsert))
-            {
-                return;
-            }
-
-            if (cellRef.Column > this.Columns && (!this.CanInsertColumns || !this.EasyInsert))
-            {
-                return;
-            }
-
-            if (isInAutoFillMode)
-            {
-                this.AutoFillCell = cellRef;
-                if (this.autoFiller.TryExtrapolate(
-                    cellRef,
-                    this.CurrentCell,
-                    this.SelectionCell,
-                    this.AutoFillCell,
-                    out var result))
-                {
-                    var formatString = this.GetFormatString(cellRef);
-                    this.autoFillToolTip.Content = FormatValue(result, formatString);
-                }
-
-                this.autoFillToolTip.Placement = PlacementMode.Relative;
-                var p = e.GetPosition(this.autoFillSelection);
-                this.autoFillToolTip.HorizontalOffset = p.X + 8;
-                this.autoFillToolTip.VerticalOffset = p.Y + 8;
-            }
-            else
-            {
-                this.SelectionCell = cellRef;
-            }
-
-            this.ScrollIntoView(cellRef);
-        }
-
-        /// <summary>
-        /// Handles mouse wheel preview events.
-        /// </summary>
-        /// <param name="e">The event arguments.</param>
-        protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
-        {
-            base.OnPreviewMouseWheel(e);
-
-            var control = Keyboard.IsKeyDown(Key.LeftCtrl);
-            if (control)
-            {
-                double s = 1 + (e.Delta * 0.0004);
-                var tg = new TransformGroup();
-                if (this.LayoutTransform != null)
-                {
-                    tg.Children.Add(this.LayoutTransform);
-                }
-
-                tg.Children.Add(new ScaleTransform(s, s));
-                this.LayoutTransform = tg;
-                e.Handled = true;
-            }
-        }
-
-        /// <summary>
-        /// Handles text input events.
-        /// </summary>
-        /// <param name="e">The event arguments.</param>
-        protected override void OnTextInput(TextCompositionEventArgs e)
-        {
-            base.OnTextInput(e);
-
-            // do not allow special characters (including backspace, tab, enter)
-            // it is particularly bad to add backspace characters to the cell, since this may not be XML serialized...
-            if (e.Text.Length == 0 || e.Text[0] < 32)
-            {
-                return;
-            }
-
-            if (this.currentEditControl == null)
-            {
-                this.ShowEditControl();
-            }
-
-            var textEditor = this.currentEditControl as TextBox;
-            if (textEditor != null && textEditor.IsEnabled)
-            {
-                this.ShowTextBoxEditControl();
-                this.Dispatcher.BeginInvoke(new Action(
-                    () =>
-                        {
-                            // make sure this code is executed after the textbox has been loaded (and bindings updated)
-                            textEditor.Text = e.Text;
-                            textEditor.CaretIndex = textEditor.Text.Length;
-                        }), DispatcherPriority.Loaded);
             }
 
             e.Handled = true;
@@ -2465,32 +1989,168 @@ namespace PropertyTools.Wpf
 
             if (TypeHelper.IsIListIList(list.GetType()))
             {
-                return new ListListOperator();
+                return new ListListOperator(this);
             }
 
             if (this.WrapItems)
             {
-                return new WrapItemsOperator();
+                return new WrapItemsOperator(this);
             }
 
-            return new ListOperator();
+            return new ListOperator(this);
         }
 
         /// <summary>
-        /// Updates the content of the specified cell.
+        /// Splits a string separated by \n and \t into an array.
         /// </summary>
-        /// <param name="cellRef">The cell reference.</param>
-        private void UpdateCellContent(CellRef cellRef)
+        /// <param name="text">The text.</param>
+        /// <returns>
+        /// An 2-dimensional array of strings.
+        /// </returns>
+        protected virtual object[,] TextToArray(string text)
         {
-            var c = this.GetCellElement(cellRef);
-            if (c != null)
+            var rows = 0;
+            var columns = 0;
+            var lines = text.Split('\n');
+            foreach (var line in lines)
             {
-                this.sheetGrid.Children.Remove(c);
-                this.cellInsertionIndex--;
-                this.cellMap.Remove(cellRef.GetHashCode());
+                rows++;
+                var fields = line.Split('\t');
+                if (fields.Length > columns)
+                {
+                    columns = fields.Length;
+                }
             }
 
-            this.InsertDisplayControl(cellRef);
+            if (rows == 0 || columns == 0)
+            {
+                return null;
+            }
+
+            var result = new object[rows, columns];
+            var row = 0;
+            foreach (var line in lines)
+            {
+                var fields = line.Split('\t');
+
+                var column = 0;
+                foreach (var field in fields)
+                {
+                    result[row, column] = field.Trim(" \r\n\t".ToCharArray());
+                    column++;
+                }
+
+                row++;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Implements the clear operation.
+        /// </summary>
+        protected virtual void ClearOverride()
+        {
+            foreach (var cell in this.SelectedCells)
+            {
+                var defaultValue = this.GetDefaultValue(cell);
+                this.TrySetCellValue(cell, defaultValue);
+            }
+        }
+
+        /// <summary>
+        /// Gets the default value for the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>The default value.</returns>
+        protected virtual object GetDefaultValue(CellRef cell)
+        {
+            var value = this.GetCellValue(cell);
+            if (value == null)
+            {
+                return null;
+            }
+
+            var type = this.Operator.GetPropertyType(cell);
+            var isNullable = Nullable.GetUnderlyingType(type) != null;
+            if (type.IsValueType && !isNullable)
+            {
+                try
+                {
+                    return Activator.CreateInstance(type);
+                }
+                catch
+                {
+                    // could not call default ctor?
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the cell values of the specified cell range.
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <returns>
+        /// An array of cell values.
+        /// </returns>
+        protected object[,] GetCellValues(CellRange range)
+        {
+            var result = new object[range.Rows, range.Columns];
+            for (var i = 0; i < range.Rows; i++)
+            {
+                for (var j = 0; j < range.Columns; j++)
+                {
+                    result[i, j] = this.GetCellValue(new CellRef(range.TopRow + i, range.LeftColumn + j));
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Gets the string values of the specified cell range.
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <param name="values">The values (optional).</param>
+        /// <returns>
+        /// An array of cell strings.
+        /// </returns>
+        protected string[,] GetCellStrings(CellRange range, object[,] values = null)
+        {
+            var result = new string[range.Rows, range.Columns];
+            for (var i = 0; i < range.Rows; i++)
+            {
+                for (var j = 0; j < range.Columns; j++)
+                {
+                    var cell = new CellRef(range.TopRow + i, range.LeftColumn + j);
+                    var value = values != null ? values[i, j] : this.GetCellValue(cell);
+                    result[i, j] = this.FormatCellString(cell, value);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Tries to set the value in the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <param name="value">The value.</param>
+        /// <returns>
+        /// True if the value was set.
+        /// </returns>
+        protected bool TrySetCellValue(CellRef cell, object value)
+        {
+            var cellWasSet = this.Operator.TrySetCellValue(cell, value);
+            if (cellWasSet && !(this.ItemsSource is INotifyCollectionChanged))
+            {
+                this.UpdateCellContent(cell);
+            }
+
+            return cellWasSet;
         }
 
         /// <summary>
@@ -2502,11 +2162,11 @@ namespace PropertyTools.Wpf
         /// </returns>
         private static bool AreAllElementsSerializable(object[,] array)
         {
-            int m = array.GetLength(0);
-            int n = array.GetLength(1);
-            for (int i = 0; i < m; i++)
+            var m = array.GetLength(0);
+            var n = array.GetLength(1);
+            for (var i = 0; i < m; i++)
             {
-                for (int j = 0; j < n; j++)
+                for (var j = 0; j < n; j++)
                 {
                     if (array[i, j] == null)
                     {
@@ -2607,52 +2267,6 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Splits a string separated by \n and \t into an array.
-        /// </summary>
-        /// <param name="text">The text.</param>
-        /// <returns>
-        /// An 2-dimensional array of strings.
-        /// </returns>
-        protected virtual object[,] TextToArray(string text)
-        {
-            var rows = 0;
-            var columns = 0;
-            var lines = text.Split('\n');
-            foreach (var line in lines)
-            {
-                rows++;
-                var fields = line.Split('\t');
-                if (fields.Length > columns)
-                {
-                    columns = fields.Length;
-                }
-            }
-
-            if (rows == 0 || columns == 0)
-            {
-                return null;
-            }
-
-            var result = new object[rows, columns];
-            var row = 0;
-            foreach (var line in lines)
-            {
-                var fields = line.Split('\t');
-
-                var column = 0;
-                foreach (var field in fields)
-                {
-                    result[row, column] = field.Trim(" \r\n\t".ToCharArray());
-                    column++;
-                }
-
-                row++;
-            }
-
-            return result;
-        }
-
-        /// <summary>
         /// Coerces the current cell.
         /// </summary>
         /// <param name="d">The <see cref="DependencyObject" />.</param>
@@ -2700,6 +2314,418 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
+        /// Gets the cell reference for the specified position.
+        /// </summary>
+        /// <param name="position">The position.</param>
+        /// <param name="isInAutoFillMode">if set to <c>true</c> [is in auto fill mode].</param>
+        /// <param name="relativeTo">The relative to.</param>
+        /// <returns>
+        /// The cell reference.
+        /// </returns>
+        private CellRef GetCell(Point position, bool isInAutoFillMode = false, CellRef relativeTo = default(CellRef))
+        {
+            var w = 0d;
+            var column = -1;
+            var row = -1;
+            for (var j = 0; j < this.sheetGrid.ColumnDefinitions.Count; j++)
+            {
+                var aw0 = j - 1 >= 0 ? this.sheetGrid.ColumnDefinitions[j - 1].ActualWidth : 0;
+                var aw1 = this.sheetGrid.ColumnDefinitions[j].ActualWidth;
+                var aw2 = j + 1 < this.sheetGrid.ColumnDefinitions.Count
+                                 ? this.sheetGrid.ColumnDefinitions[j + 1].ActualWidth
+                                 : 0;
+                if (isInAutoFillMode)
+                {
+                    if (relativeTo.Column <= j)
+                    {
+                        aw0 = 0;
+                        aw2 *= 0.5;
+                    }
+                    else
+                    {
+                        aw0 *= 0.5;
+                        aw2 = 0;
+                    }
+                }
+                else
+                {
+                    aw0 = 0;
+                    aw2 = 0;
+                }
+
+                if (position.X > w - aw0 && position.X < w + aw1 + aw2)
+                {
+                    column = j;
+                    break;
+                }
+
+                w += aw1;
+            }
+
+            if (w > 0 && column == -1)
+            {
+                column = this.sheetGrid.ColumnDefinitions.Count - 1;
+            }
+
+            var h = 0d;
+            for (var i = 0; i < this.sheetGrid.RowDefinitions.Count; i++)
+            {
+                var ah = this.sheetGrid.RowDefinitions[i].ActualHeight;
+                if (position.Y < h + ah)
+                {
+                    row = i;
+                    break;
+                }
+
+                h += ah;
+            }
+
+            if (h > 0 && row == -1)
+            {
+                row = this.sheetGrid.RowDefinitions.Count - 1;
+            }
+
+            if (column == -1 || row == -1)
+            {
+                return new CellRef(-1, -1);
+            }
+
+            return new CellRef(row, column);
+        }
+
+        /// <summary>
+        /// Gets the element at the specified cell.
+        /// </summary>
+        /// <param name="cellRef">The cell reference.</param>
+        /// <returns>
+        /// The element, or <c>null</c> if the cell was not found.
+        /// </returns>
+        private FrameworkElement GetCellElement(CellRef cellRef)
+        {
+            if (this.cellMap.TryGetValue(cellRef.GetHashCode(), out var e))
+            {
+                // check if the element is wrapped in a border container
+                if (e is Border border)
+                {
+                    return (FrameworkElement)border.Child;
+                }
+
+                return e;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the cell value from the Content property for the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell reference.</param>
+        /// <returns>
+        /// The cell value.
+        /// </returns>
+        private object GetCellValue(CellRef cell)
+        {
+            return this.Operator.GetCellValue(cell);
+        }
+
+        /// <summary>
+        /// Gets the position of the specified cell.
+        /// </summary>
+        /// <param name="cellRef">The cell reference.</param>
+        /// <returns>
+        /// The upper-left position of the cell.
+        /// </returns>
+        private Point GetPosition(CellRef cellRef)
+        {
+            var x = 0d;
+            var y = 0d;
+            for (var j = 0; j < cellRef.Column && j < this.sheetGrid.ColumnDefinitions.Count; j++)
+            {
+                x += this.sheetGrid.ColumnDefinitions[j].ActualWidth;
+            }
+
+            for (var i = 0; i < cellRef.Row && i < this.sheetGrid.RowDefinitions.Count; i++)
+            {
+                y += this.sheetGrid.RowDefinitions[i].ActualHeight;
+            }
+
+            return new Point(x, y);
+        }
+
+#if FEATURE_VIRTUALIZATION
+        /// <summary>
+        /// Gets the visible cells.
+        /// </summary>
+        /// <param name="topLeftCell">The top left cell.</param>
+        /// <param name="bottomRightCell">The bottom right cell.</param>
+        private void GetVisibleCells(out CellRef topLeftCell, out CellRef bottomRightCell)
+        {
+            var left = this.sheetScrollViewer.HorizontalOffset;
+            var right = left + this.sheetScrollViewer.ActualWidth;
+            var top = this.sheetScrollViewer.VerticalOffset;
+            var bottom = top + this.sheetScrollViewer.ActualHeight;
+
+            topLeftCell = this.GetCell(new Point(left, top));
+            bottomRightCell = this.GetCell(new Point(right, bottom));
+        }
+#endif
+
+        /// <summary>
+        /// Removes the current editor control.
+        /// </summary>
+        private void RemoveEditControl()
+        {
+            if (this.currentEditControl != null/* && this.currentEditControl.Visibility == Visibility.Visible*/)
+            {
+                var textEditor = this.currentEditControl as TextBox;
+                if (textEditor != null)
+                {
+                    textEditor.PreviewKeyDown -= this.TextEditorPreviewKeyDown;
+                }
+
+                this.sheetGrid.Children.Remove(this.currentEditControl);
+                this.currentEditControl = null;
+                this.Focus();
+            }
+        }
+
+        /// <summary>
+        /// Inserts an item.
+        /// </summary>
+        /// <param name="index">The index.</param>
+        /// <param name="updateGrid">Determines whether the grid should be updated.</param>
+        /// <returns>
+        /// The actual index of the inserted item, <c>-1</c> if no item was inserted.
+        /// </returns>
+        private int InsertItem(int index, bool updateGrid = true)
+        {
+            var actualIndex = this.Operator.InsertItem(index);
+            if (actualIndex != -1)
+            {
+                if (updateGrid)
+                {
+                    this.UpdateGridContent();
+                }
+            }
+
+            this.RefreshIfRequired();
+
+            return actualIndex;
+        }
+
+        /// <summary>
+        /// Changes the current cell with the specified delta.
+        /// </summary>
+        /// <param name="deltaRows">The change in rows.</param>
+        /// <param name="deltaColumns">The change in columns.</param>
+        protected void ChangeCurrentCell(int deltaRows, int deltaColumns)
+        {
+            var row = this.CurrentCell.Row;
+            var column = this.CurrentCell.Column;
+            row += deltaRows;
+            column += deltaColumns;
+            if (row < 0)
+            {
+                row = this.Rows - 1;
+                column--;
+            }
+
+            if (row >= this.Rows && (!this.CanInsertRows || !this.IsEasyInsertByKeyboardEnabled))
+            {
+                column++;
+                row = 0;
+                if (column >= this.Columns)
+                {
+                    column = 0;
+                }
+            }
+
+            if (column < 0)
+            {
+                column = 0;
+                row--;
+                if (row < 0)
+                {
+                    row = this.Rows - 1;
+                }
+            }
+
+            if (column >= this.Columns && (!this.CanInsertColumns || !this.IsEasyInsertByKeyboardEnabled))
+            {
+                column = 0;
+                row++;
+                if (row >= this.Rows && (!this.CanInsertRows || !this.IsEasyInsertByKeyboardEnabled))
+                {
+                    row = 0;
+                }
+            }
+
+            var cell = new CellRef(row, column);
+            if (!this.HandleAutoInsert(cell))
+            {
+                this.SelectionCell = cell;
+                this.CurrentCell = cell;
+                this.ScrollIntoView(cell);
+            }
+        }
+
+        /// <summary>
+        /// Shows the text box editor.
+        /// </summary>
+        /// <returns>
+        /// <c>true</c> if the text editor was shown, <c>false</c> otherwise.
+        /// </returns>
+        private bool ShowTextBoxEditControl()
+        {
+            if (this.currentEditControl == null)
+            {
+                this.ShowEditControl();
+            }
+
+            var textEditor = this.currentEditControl as TextBox;
+            if (textEditor != null)
+            {
+                textEditor.Visibility = Visibility.Visible;
+                textEditor.Focus();
+                textEditor.CaretIndex = textEditor.Text.Length;
+                textEditor.SelectAll();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Opens the combo box control.
+        /// </summary>
+        /// <returns>
+        /// <c>true</c> if the combo box was shown, <c>false</c> otherwise.
+        /// </returns>
+        private bool OpenComboBoxControl()
+        {
+            var comboBox = this.currentEditControl as ComboBox;
+            if (comboBox != null)
+            {
+                comboBox.IsDropDownOpen = true;
+                comboBox.Focus();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Creates the display control for the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>
+        /// The display control.
+        /// </returns>
+        private FrameworkElement CreateDisplayControl(CellRef cell)
+        {
+            var d = this.Operator.CreateCellDescriptor(cell);
+            var cd = this.CellDefinitionFactory.CreateCellDefinition(d);
+            var element = this.ControlFactory.CreateDisplayControl(cd);
+            if (element == null)
+            {
+#if DEBUG
+                throw new InvalidOperationException("Display control not implemented for " + cd);
+#else
+                return null;
+#endif
+            }
+
+            element.DataContext = cd.BindingSource;
+            element.SourceUpdated += (s, e) => this.CurrentCellSourceUpdated(cell);
+
+            return element;
+        }
+
+        /// <summary>
+        /// Creates the edit control for the specified cell.
+        /// </summary>
+        /// <param name="cell">The cell.</param>
+        /// <returns>
+        /// The edit control.
+        /// </returns>
+        private FrameworkElement CreateEditControl(CellRef cell)
+        {
+            var d = this.Operator.CreateCellDescriptor(cell);
+            var cd = this.CellDefinitionFactory.CreateCellDefinition(d);
+            var element = this.ControlFactory.CreateEditControl(cd);
+            if (element == null)
+            {
+                return null;
+            }
+
+            element.DataContext = cd.BindingSource;
+            element.SourceUpdated += (s, e) => this.CurrentCellSourceUpdated(cell);
+
+            return element;
+        }
+
+        /// <summary>
+        /// Shows the edit control for the current cell.
+        /// </summary>
+        private void ShowEditControl()
+        {
+            this.RemoveEditControl();
+            var cell = this.CurrentCell;
+
+            if (cell.Row >= this.Rows || cell.Column >= this.Columns)
+            {
+                return;
+            }
+
+            if (this.currentEditControl != null)
+            {
+                throw new InvalidOperationException();
+            }
+
+            this.editingCells = this.SelectedCells.ToList();
+
+            this.currentEditControl = this.CreateEditControl(cell);
+            if (this.currentEditControl == null)
+            {
+                return;
+            }
+
+            // TODO: refactor this special case
+            if (this.currentEditControl is TextBox textEditor)
+            {
+                this.currentEditControl.Visibility = Visibility.Hidden;
+                textEditor.PreviewKeyDown += this.TextEditorPreviewKeyDown;
+            }
+
+            Grid.SetColumn(this.currentEditControl, this.CurrentCell.Column);
+            Grid.SetRow(this.currentEditControl, this.CurrentCell.Row);
+
+            this.sheetGrid.Children.Add(this.currentEditControl);
+
+            if (this.currentEditControl.Visibility == Visibility.Visible)
+            {
+                this.currentEditControl.Focus();
+            }
+        }
+
+        /// <summary>
+        /// Updates the content of the specified cell.
+        /// </summary>
+        /// <param name="cellRef">The cell reference.</param>
+        private void UpdateCellContent(CellRef cellRef)
+        {
+            var c = this.GetCellElement(cellRef);
+            if (c != null)
+            {
+                this.sheetGrid.Children.Remove(c);
+                this.cellInsertionIndex--;
+                this.cellMap.Remove(cellRef.GetHashCode());
+            }
+
+            this.InsertDisplayControl(cellRef);
+        }
+
+        /// <summary>
         /// Handles changes in the current cell.
         /// </summary>
         /// <param name="changedCell">The cell that was changed.</param>
@@ -2741,10 +2767,10 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Adds the display control for the specified cell.
+        /// Inserts the display control for the specified cell.
         /// </summary>
         /// <param name="cellRef">The cell reference.</param>
-        private void AddDisplayControl(CellRef cellRef)
+        private void InsertDisplayControl(CellRef cellRef)
         {
             var e = this.CreateDisplayControl(cellRef);
             if (e == null)
@@ -2753,39 +2779,12 @@ namespace PropertyTools.Wpf
             }
 
             SetElementPosition(e, cellRef);
-            this.sheetGrid.Children.Add(e);
-            this.cellMap.Add(cellRef.GetHashCode(), e);
-        }
 
-        /// <summary>
-        /// Creates the cell descriptor for the specified cell.
-        /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <returns>A cell descriptor.</returns>
-        private CellDescriptor CreateCellDescriptor(CellRef cell)
-        {
-            var pd = this.GetPropertyDefinition(cell);
-            var item = this.Operator.GetItem(this, cell);
-            var d = new CellDescriptor
+            if (this.cellInsertionIndex > this.sheetGrid.Children.Count)
             {
-                PropertyDefinition = pd,
-                Item = item,
-                Descriptor = this.Operator.GetPropertyDescriptor(pd),
-                PropertyType = this.Operator.GetPropertyType(pd, cell, item),
-                BindingPath = this.Operator.GetBindingPath(this, cell),
-                BindingSource = this.Operator.GetDataContext(this, cell)
-            };
-            return d;
-        }
+                throw new InvalidOperationException("Error in DataGrid");
+            }
 
-        /// <summary>
-        /// Inserts the display control for the specified cell.
-        /// </summary>
-        /// <param name="cellRef">The cell reference.</param>
-        private void InsertDisplayControl(CellRef cellRef)
-        {
-            var e = this.CreateDisplayControl(cellRef);
-            SetElementPosition(e, cellRef);
             this.sheetGrid.Children.Insert(this.cellInsertionIndex, e);
             this.cellInsertionIndex++;
             this.cellMap.Add(cellRef.GetHashCode(), e);
@@ -2803,7 +2802,7 @@ namespace PropertyTools.Wpf
             this.CollectionView?.Refresh();
             if (actualIndex != -1)
             {
-                var viewIndex = this.Operator.GetCollectionViewIndex(this, actualIndex);
+                var viewIndex = this.Operator.GetCollectionViewIndex(actualIndex);
 
                 var cell = this.ItemsInRows
                                ? new CellRef(viewIndex, 0)
@@ -2974,57 +2973,13 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Implements the clear operation.
-        /// </summary>
-        protected virtual void ClearOverride()
-        {
-            foreach (var cell in this.SelectedCells)
-            {
-                var defaultValue = this.GetDefaultValue(cell);
-                this.TrySetCellValue(cell, defaultValue);
-            }
-        }
-
-        /// <summary>
-        /// Gets the default value for the specified cell.
-        /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <returns>The default value.</returns>
-        protected virtual object GetDefaultValue(CellRef cell)
-        {
-            var value = this.GetCellValue(cell);
-            if (value == null)
-            {
-                return null;
-            }
-
-            var pd = this.GetPropertyDefinition(cell);
-            var type = this.Operator.GetPropertyType(pd, cell, value);
-            var isNullable = Nullable.GetUnderlyingType(type) != null;
-            if (type.IsValueType && !isNullable)
-            {
-                try
-                {
-                    return Activator.CreateInstance(type);
-                }
-                catch
-                {
-                    // could not call default ctor?
-                    return null;
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
         /// Deletes the selected columns.
         /// </summary>
         private void DeleteColumns()
         {
             var from = Math.Min(this.CurrentCell.Column, this.SelectionCell.Column);
             var to = Math.Max(this.CurrentCell.Column, this.SelectionCell.Column);
-            this.Operator.DeleteColumns(this, from, to - from + 1);
+            this.Operator.DeleteColumns(from, to - from + 1);
             this.RefreshIfRequired();
 
             var maxColumn = this.Columns > 0 ? this.Columns - 1 : 0;
@@ -3048,7 +3003,7 @@ namespace PropertyTools.Wpf
         {
             var from = Math.Min(this.CurrentCell.Row, this.SelectionCell.Row);
             var to = Math.Max(this.CurrentCell.Row, this.SelectionCell.Row);
-            this.Operator.DeleteRows(this, from, to - from + 1);
+            this.Operator.DeleteRows(from, to - from + 1);
             this.RefreshIfRequired();
 
             var maxRow = this.Rows > 0 ? this.Rows - 1 : 0;
@@ -3142,11 +3097,13 @@ namespace PropertyTools.Wpf
         /// <summary>
         /// Determines whether the current column/row can be sorted.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>
+        ///   <c>true</c> if this instance can sort; otherwise, <c>false</c>.
+        /// </returns>
         private bool CanSort()
         {
             var index = this.ItemsInRows ? this.CurrentCell.Column : this.CurrentCell.Row;
-            return this.CollectionView != null && this.Operator.CanSort(this, index);
+            return this.CollectionView != null && this.Operator.CanSort(index);
         }
 
         /// <summary>
@@ -3155,14 +3112,19 @@ namespace PropertyTools.Wpf
         /// <param name="append">Append the sort description if set to <c>true</c>.</param>
         private void ToggleSort(bool append = false)
         {
-            var index = this.ItemsInRows ? this.CurrentCell.Column : this.CurrentCell.Row;
-            var propertyName = this.PropertyDefinitions[index].PropertyName;
-            var descriptor = this.Operator.GetPropertyDescriptor(this.PropertyDefinitions[index]);
-            var isComparable = descriptor != null && typeof(IComparable).IsAssignableFrom(descriptor.PropertyType);
-            if (!isComparable)
+            var propertyDefinition = this.GetPropertyDefinition(this.CurrentCell);
+            if (!propertyDefinition.CanSort)
             {
                 return;
             }
+
+            var propertyName = propertyDefinition.PropertyName;
+            //var descriptor = this.Operator.GetPropertyDescriptor(propertyDefinition);
+            //var isComparable = descriptor != null && typeof(IComparable).IsAssignableFrom(descriptor.PropertyType);
+            //if (!isComparable)
+            //{
+            //    return;
+            //}
 
             SortDescription? current = null;
             if (this.sortDescriptions.Any(s => s.PropertyName == propertyName))
@@ -3371,25 +3333,6 @@ namespace PropertyTools.Wpf
         }
 
         /// <summary>
-        /// Gets the column/row definition for the specified cell.
-        /// </summary>
-        /// <param name="cell">The cell reference.</param>
-        /// <returns>
-        /// The column/row definition.
-        /// </returns>
-        internal PropertyDefinition GetPropertyDefinition(CellRef cell)
-        {
-            var index = this.ItemsInRows ? cell.Column : cell.Row;
-
-            if (index < this.PropertyDefinitions.Count)
-            {
-                return this.PropertyDefinitions[index];
-            }
-
-            return null;
-        }
-
-        /// <summary>
         /// Gets the row header.
         /// </summary>
         /// <param name="j">The j.</param>
@@ -3440,7 +3383,7 @@ namespace PropertyTools.Wpf
             var from = Math.Min(this.CurrentCell.Column, this.SelectionCell.Column);
             var to = Math.Max(this.CurrentCell.Column, this.SelectionCell.Column);
 
-            this.Operator.InsertColumns(this, from, to - from + 1);
+            this.Operator.InsertColumns(from, to - from + 1);
             this.RefreshIfRequired();
         }
 
@@ -3451,7 +3394,7 @@ namespace PropertyTools.Wpf
         {
             var from = Math.Min(this.CurrentCell.Row, this.SelectionCell.Row);
             var to = Math.Max(this.CurrentCell.Row, this.SelectionCell.Row);
-            this.Operator.InsertRows(this, from, to - from + 1);
+            this.Operator.InsertRows(from, to - from + 1);
             this.RefreshIfRequired();
         }
 
@@ -3622,7 +3565,6 @@ namespace PropertyTools.Wpf
                 this.AutoSizeAllRows();
             }
 
-
             var row = Grid.GetRow((GridSplitter)sender);
             this.AutoSizeRow(row);
         }
@@ -3752,8 +3694,8 @@ namespace PropertyTools.Wpf
         /// </returns>
         private string ConvertToCsv(string[,] input, string separator, bool encode = false)
         {
-            int m = input.GetLength(0);
-            int n = input.GetLength(1);
+            var m = input.GetLength(0);
+            var n = input.GetLength(1);
 
             var sb = new StringBuilder();
 
@@ -3785,51 +3727,6 @@ namespace PropertyTools.Wpf
             }
 
             return sb.ToString();
-        }
-
-        /// <summary>
-        /// Gets the cell values of the specified cell range.
-        /// </summary>
-        /// <param name="range">The range.</param>
-        /// <returns>
-        /// An array of cell values.
-        /// </returns>
-        protected object[,] GetCellValues(CellRange range)
-        {
-            var result = new object[range.Rows, range.Columns];
-            for (int i = 0; i < range.Rows; i++)
-            {
-                for (int j = 0; j < range.Columns; j++)
-                {
-                    result[i, j] = this.GetCellValue(new CellRef(range.TopRow + i, range.LeftColumn + j));
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Gets the string values of the specified cell range.
-        /// </summary>
-        /// <param name="range">The range.</param>
-        /// <param name="values">The values (optional).</param>
-        /// <returns>
-        /// An array of cell strings.
-        /// </returns>
-        protected string[,] GetCellStrings(CellRange range, object[,] values = null)
-        {
-            var result = new string[range.Rows, range.Columns];
-            for (int i = 0; i < range.Rows; i++)
-            {
-                for (int j = 0; j < range.Columns; j++)
-                {
-                    var cell = new CellRef(range.TopRow + i, range.LeftColumn + j);
-                    var value = values != null ? values[i, j] : this.GetCellValue(cell);
-                    result[i, j] = this.FormatCellString(cell, value);
-                }
-            }
-
-            return result;
         }
 
         /// <summary>
@@ -3897,18 +3794,18 @@ namespace PropertyTools.Wpf
                 if (cell.Row >= this.Rows)
                 {
                     var actualIndex = this.Rows;
-                    this.Operator.InsertRows(this, actualIndex, 1);
+                    this.Operator.InsertRows(actualIndex, 1);
                     this.CollectionView?.Refresh();
-                    actualIndex = this.Operator.GetCollectionViewIndex(this, actualIndex);
+                    actualIndex = this.Operator.GetCollectionViewIndex(actualIndex);
                     actualCell = new CellRef(actualIndex, cell.Column);
                 }
 
                 if (cell.Column >= this.Columns)
                 {
                     var actualIndex = this.Columns;
-                    this.Operator.InsertColumns(this, actualIndex, 1);
+                    this.Operator.InsertColumns(actualIndex, 1);
                     this.CollectionView?.Refresh();
-                    actualIndex = this.Operator.GetCollectionViewIndex(this, actualIndex);
+                    actualIndex = this.Operator.GetCollectionViewIndex(actualIndex);
                     actualCell = new CellRef(cell.Row, actualIndex);
                 }
 
@@ -3967,9 +3864,6 @@ namespace PropertyTools.Wpf
             Grid.SetColumn(this.autoFillBox, column + columnspan - 1);
             Grid.SetRow(this.autoFillBox, row + rowspan - 1);
 
-            var allSelected = rowspan == this.Rows && columnspan == this.Columns;
-            this.topLeft.Background = allSelected ? this.rowSelectionBackground.Background : this.rowGrid.Background;
-
             var r = Math.Min(this.CurrentCell.Row, this.AutoFillCell.Row);
             var c = Math.Min(this.CurrentCell.Column, this.AutoFillCell.Column);
             var rs = Math.Abs(this.CurrentCell.Row - this.AutoFillCell.Row) + 1;
@@ -3990,29 +3884,66 @@ namespace PropertyTools.Wpf
         /// </summary>
         private void UpdateSelectionVisibility()
         {
-            this.currentBackground.Visibility = this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
-                                                    ? Visibility.Visible
-                                                    : Visibility.Hidden;
-            this.autoFillBox.Visibility = this.IsAutoFillEnabled && this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
-                                              ? Visibility.Visible
-                                              : Visibility.Hidden;
-            this.selectionBackground.Visibility = this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
-                                                      ? Visibility.Visible
-                                                      : Visibility.Hidden;
-            this.columnSelectionBackground.Visibility = this.CurrentCell.Column < this.Columns
-                                                            ? Visibility.Visible
-                                                            : Visibility.Hidden;
-            this.rowSelectionBackground.Visibility = this.CurrentCell.Row < this.Rows ? Visibility.Visible : Visibility.Hidden;
-            this.selection.Visibility = this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
-                                            ? Visibility.Visible
-                                            : Visibility.Hidden;
-            this.selection.Visibility = this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
-                                            ? Visibility.Visible
-                                            : Visibility.Hidden;
+            var isEnabled = this.IsEnabled;
+            if (this.currentBackground != null)
+            {
+                this.currentBackground.Visibility =
+                    isEnabled && this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
+                        ? Visibility.Visible
+                        : Visibility.Hidden;
+            }
+
+            if (this.autoFillBox != null)
+            {
+                this.autoFillBox.Visibility =
+                    isEnabled && this.IsAutoFillEnabled && this.CurrentCell.Row < this.Rows
+                    && this.CurrentCell.Column < this.Columns
+                        ? Visibility.Visible
+                        : Visibility.Hidden;
+            }
+
+            if (this.selectionBackground != null)
+            {
+                this.selectionBackground.Visibility =
+                    isEnabled && this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
+                        ? Visibility.Visible
+                        : Visibility.Hidden;
+            }
+
+            if (this.columnSelectionBackground != null)
+            {
+                this.columnSelectionBackground.Visibility = isEnabled && this.CurrentCell.Column < this.Columns
+                                                                ? Visibility.Visible
+                                                                : Visibility.Hidden;
+            }
+
+            if (this.rowSelectionBackground != null)
+            {
+                this.rowSelectionBackground.Visibility =
+                    isEnabled && this.CurrentCell.Row < this.Rows ? Visibility.Visible : Visibility.Hidden;
+            }
+
+            if (this.selection != null)
+            {
+                this.selection.Visibility =
+                    isEnabled && this.CurrentCell.Row < this.Rows && this.CurrentCell.Column < this.Columns
+                        ? Visibility.Visible
+                        : Visibility.Hidden;
+            }
+
+            if (this.topLeft != null && this.rowSelectionBackground != null && this.rowGrid != null)
+            {
+                var rowspan = Math.Abs(this.CurrentCell.Row - this.SelectionCell.Row) + 1;
+                var columnspan = Math.Abs(this.CurrentCell.Column - this.SelectionCell.Column) + 1;
+                var allSelected = rowspan == this.Rows && columnspan == this.Columns;
+                this.topLeft.Background = isEnabled && allSelected
+                                              ? this.rowSelectionBackground.Background
+                                              : this.rowGrid.Background;
+            }
         }
 
         /// <summary>
-        /// Handles change in selection cell.
+        /// Handles changes in the <see cref="P:SelectionCell" /> property.
         /// </summary>
         private void SelectionCellChanged()
         {
@@ -4035,6 +3966,7 @@ namespace PropertyTools.Wpf
             this.sheetGrid.RowDefinitions.Clear();
             this.sheetGrid.ColumnDefinitions.Clear();
             this.sheetGrid.Children.Clear();
+            this.cellInsertionIndex = 0;
             this.cellMap.Clear();
         }
 
@@ -4105,7 +4037,7 @@ namespace PropertyTools.Wpf
             {
                 for (var j = 0; j < columns; j++)
                 {
-                    this.AddDisplayControl(new CellRef(i, j));
+                    this.InsertDisplayControl(new CellRef(i, j));
                 }
             }
 
@@ -4177,12 +4109,16 @@ namespace PropertyTools.Wpf
             }
         }
 
+        /// <summary>
+        /// Updates the sort description markers.
+        /// </summary>
         private void UpdateSortDescriptionMarkers()
         {
             foreach (var sdm in this.sortDescriptionMarkers)
             {
                 this.columnGrid.Children.Remove(sdm);
             }
+
             this.sortDescriptionMarkers.Clear();
 
             if (!this.ItemsInRows)
@@ -4192,8 +4128,8 @@ namespace PropertyTools.Wpf
 
             foreach (var sd in this.sortDescriptions)
             {
-                int index = -1;
-                for (int i = 0; i < this.PropertyDefinitions.Count; i++)
+                var index = -1;
+                for (var i = 0; i < this.PropertyDefinitions.Count; i++)
                 {
                     if (this.PropertyDefinitions[i].PropertyName == sd.PropertyName)
                     {
@@ -4202,7 +4138,10 @@ namespace PropertyTools.Wpf
                     }
                 }
 
-                if (index == -1) continue;
+                if (index == -1)
+                {
+                    continue;
+                }
 
                 var tb = new TextBlock
                 {
@@ -4374,16 +4313,16 @@ namespace PropertyTools.Wpf
 
             if (this.AutoGenerateColumns && this.ColumnDefinitions.Count == 0)
             {
-                this.Operator.AutoGenerateColumns(this);
+                this.Operator.AutoGenerateColumns();
             }
 
-            this.Operator.UpdatePropertyDefinitions(this);
+            this.Operator.UpdatePropertyDefinitions();
 
             // Determine if columns or rows are defined
             this.ItemsInColumns = this.PropertyDefinitions.FirstOrDefault(pd => pd is RowDefinition) != null;
 
-            var rows = this.Operator.GetRowCount(this);
-            var columns = this.Operator.GetColumnCount(this);
+            var rows = this.Operator.GetRowCount();
+            var columns = this.Operator.GetColumnCount();
 
             var visibility = rows >= 0 ? Visibility.Visible : Visibility.Hidden;
 
@@ -4452,7 +4391,7 @@ namespace PropertyTools.Wpf
 
                 if (this.ItemHeaderPropertyPath != null && this.ItemsInRows)
                 {
-                    cell.DataContext = this.Operator.GetItem(this, new CellRef(i, -1));
+                    cell.DataContext = this.Operator.GetItem(new CellRef(i, -1));
                     cell.SetBinding(TextBlock.TextProperty, new Binding(this.ItemHeaderPropertyPath));
                 }
 
@@ -4552,6 +4491,112 @@ namespace PropertyTools.Wpf
                 this.sheetGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
                 this.rowGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
             }
+        }
+
+        /// <summary>
+        /// Handles changes to the <see cref="P:IsEnabled" /> property.
+        /// </summary>
+        /// <param name="dependencyPropertyChangedEventArgs">The <see cref="System.Windows.DependencyPropertyChangedEventArgs" /> instance containing the event data.</param>
+        private void HandleIsEnabledChanged(DependencyPropertyChangedEventArgs dependencyPropertyChangedEventArgs)
+        {
+            this.UpdateSelectionVisibility();
+        }
+
+        /// <summary>
+        /// Resizes all columns automatically.
+        /// </summary>
+        private void AutoSizeAllColumns()
+        {
+            this.sheetGrid.UpdateLayout();
+            this.columnGrid.UpdateLayout();
+            for (var i = 0; i < this.Columns; i++)
+            {
+                this.AutoSizeColumn(i);
+            }
+        }
+
+        /// <summary>
+        /// Resizes all rows automatically.
+        /// </summary>
+        private void AutoSizeAllRows()
+        {
+            this.sheetGrid.UpdateLayout();
+            this.rowGrid.UpdateLayout();
+            for (var i = 0; i < this.Rows; i++)
+            {
+                this.AutoSizeRow(i);
+            }
+        }
+
+        /// <summary>
+        /// Auto-sizes the specified column.
+        /// </summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The calculated width of the column.</returns>
+        private double AutoSizeColumn(int column)
+        {
+            if (column < 0 || column >= this.Columns)
+            {
+                throw new ArgumentException("Invalid column");
+            }
+
+            // Initialize with the width of the header element
+            var headerElement = this.GetColumnElement(column);
+            var maximumWidth = headerElement.ActualWidth + headerElement.Margin.Left + headerElement.Margin.Right;
+
+            // Compare with the widths of the cell elements
+            for (var i = 0; i < this.sheetGrid.RowDefinitions.Count; i++)
+            {
+                var c = this.GetCellElement(new CellRef(i, column));
+
+                if (c != null)
+                {
+                    maximumWidth = Math.Max(maximumWidth, c.ActualWidth + c.Margin.Left + c.Margin.Right);
+                }
+            }
+
+            var newWidth = (int)maximumWidth + 2;
+            this.SetColumnWidth(column, new GridLength(newWidth));
+            return newWidth;
+        }
+
+        /// <summary>
+        /// Auto-sizes the specified row.
+        /// </summary>
+        /// <param name="row">The row.</param>
+        private void AutoSizeRow(int row)
+        {
+            // Initialize with the height of the header element
+            var headerElement = this.GetRowElement(row);
+            var maximumHeight = headerElement.ActualHeight + headerElement.Margin.Top + headerElement.Margin.Bottom;
+
+            // Compare with the heights of the cell elements
+            for (var i = 0; i < this.sheetGrid.ColumnDefinitions.Count; i++)
+            {
+                var c = this.GetCellElement(new CellRef(row, i));
+                if (c != null)
+                {
+                    maximumHeight = Math.Max(maximumHeight, c.ActualHeight + c.Margin.Top + c.Margin.Bottom);
+                }
+            }
+
+            this.sheetGrid.RowDefinitions[row].Height = new GridLength((int)maximumHeight + 2);
+        }
+
+        /// <summary>
+        /// Copies the selected cells to the clipboard, tab-separated.
+        /// </summary>
+        private void Copy()
+        {
+            this.CopyOverride();
+        }
+
+        /// <summary>
+        /// Cuts the selected items.
+        /// </summary>
+        private void Cut()
+        {
+            this.CutOverride();
         }
     }
 }
