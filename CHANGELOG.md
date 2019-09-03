@@ -1,7 +1,7 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [3.0.0]
 ### Changed
 - DataGrid: Commands moved to DataGridCommands
 - DataGrid: DeleteOverride renamed to ClearOverride
@@ -28,6 +28,8 @@ All notable changes to this project will be documented in this file.
 - DataGrid: Exception in AddDisplayControl #181
 - DataGrid: Support for custom type descriptors #200
 - PropertyGrid: Support BrowsableAttribute on enum items when shown as ComboBox or ListBox #133
+- PropertyGrid: Hidden error info when HeaderPlacement = Above #212
+- TreeListBox: Applied workaround for "Height must be non-negative" exception #38 #142
 
 ### Added
 - EditableAttribute
@@ -60,7 +62,8 @@ All notable changes to this project will be documented in this file.
 ### Added
 - First semantic version release
 
-[Unreleased]: https://github.com/objorke/PropertyTools/compare/v2.0.1...HEAD
-[2.0.1]: https://github.com/objorke/PropertyTools/compare/v2.0.1...v1.1.0
-[1.1.0]: https://github.com/objorke/PropertyTools/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/objorke/PropertyTools/compare/v0.1.0...v1.0.0
+[Unreleased]: https://github.com/PropertyTools/PropertyTools/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/PropertyTools/PropertyTools/compare/v3.0.0...v2.0.1
+[2.0.1]: https://github.com/PropertyTools/PropertyTools/compare/v2.0.1...v1.1.0
+[1.1.0]: https://github.com/PropertyTools/PropertyTools/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/PropertyTools/PropertyTools/compare/v0.1.0...v1.0.0

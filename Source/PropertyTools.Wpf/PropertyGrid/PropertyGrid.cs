@@ -1015,10 +1015,13 @@ namespace PropertyTools.Wpf
 
                 var tabItem = new TabItem { Header = tab, Padding = new Thickness(4), Name = tab.Id ?? string.Empty };
 
-                var dataErrorInfoInstance = instance as IDataErrorInfo;
-                if (dataErrorInfoInstance != null)
+                if (instance is IDataErrorInfo dataErrorInfoInstance)
                 {
                     tab.UpdateHasErrors(dataErrorInfoInstance);
+                }
+                else if (instance is INotifyDataErrorInfo notifyDataErrorInfoInstance)
+                {
+                    tab.UpdateHasErrors(notifyDataErrorInfoInstance);
                 }
 
                 if (fillTab)
@@ -1358,6 +1361,7 @@ namespace PropertyTools.Wpf
 
             var propertyLabel = this.CreateLabel(pi);
             var propertyControl = this.CreatePropertyControl(pi);
+            ContentControl errorControl = null;
             if (propertyControl != null)
             {
                 if (!double.IsNaN(pi.Width))
@@ -1396,7 +1400,8 @@ namespace PropertyTools.Wpf
                 }
 
                 var dataErrorInfoInstance = instance as IDataErrorInfo;
-                if (dataErrorInfoInstance != null)
+                var notifyDataErrorInfoInstance = instance as INotifyDataErrorInfo;
+                if (dataErrorInfoInstance != null || notifyDataErrorInfoInstance != null)
                 {
                     if (this.ValidationTemplate != null)
                     {
@@ -1408,12 +1413,14 @@ namespace PropertyTools.Wpf
                         propertyControl.Style = this.ValidationErrorStyle;
                     }
 
-                    var errorControl = new ContentControl
+                    errorControl = new ContentControl
                     {
                         ContentTemplate = this.ValidationErrorTemplate,
                         Focusable = false
                     };
-                    var errorConverter = new DataErrorInfoConverter(dataErrorInfoInstance, pi.PropertyName);
+                    IValueConverter errorConverter = dataErrorInfoInstance != null ?
+                        (IValueConverter)new DataErrorInfoConverter(dataErrorInfoInstance, pi.PropertyName) :
+                        new NotifyDataErrorInfoConverter(notifyDataErrorInfoInstance, pi.PropertyName);
                     var visibilityBinding = new Binding(pi.PropertyName)
                     {
                         Converter = errorConverter,
@@ -1427,7 +1434,13 @@ namespace PropertyTools.Wpf
                     errorControl.SetBinding(VisibilityProperty, visibilityBinding);
 
                     // When the visibility of the error control is changed, updated the HasErrors of the tab
-                    errorControl.TargetUpdated += (s, e) => tab.UpdateHasErrors(dataErrorInfoInstance);
+                    errorControl.TargetUpdated += (s, e) =>
+                    {
+                        if (dataErrorInfoInstance != null)
+                            tab.UpdateHasErrors(dataErrorInfoInstance);
+                        else
+                            tab.UpdateHasErrors(notifyDataErrorInfoInstance);
+                    };
 
                     var contentBinding = new Binding(pi.PropertyName)
                     {
@@ -1502,6 +1515,12 @@ namespace PropertyTools.Wpf
                                 Grid.SetRow(propertyControl, 1);
                                 Grid.SetColumn(propertyControl, 0);
                                 Grid.SetColumnSpan(propertyControl, 2);
+                                if (errorControl != null)
+                                {
+                                    Grid.SetRow(errorControl, 2);
+                                    Grid.SetColumn(errorControl, 0);
+                                    Grid.SetColumnSpan(errorControl, 2);
+                                }
                             }
                         }
 
